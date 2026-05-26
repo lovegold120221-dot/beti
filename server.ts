@@ -190,6 +190,10 @@ WHATSAPP STYLE:
 }
 
 async function startBaileysSession(userId: string) {
+  if (IS_VERCEL) {
+    throw new Error('Baileys pairing/sessions are not supported on Vercel serverless.');
+  }
+
   const authPath = getAuthPath(userId);
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
   const { version } = await fetchLatestBaileysVersion();
