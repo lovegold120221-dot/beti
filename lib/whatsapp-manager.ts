@@ -2,10 +2,11 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs';
 import QRCode from 'qrcode';
-import * as baileysLib from '@whiskeysockets/baileys';
 import { GoogleGenAI } from "@google/genai";
 import Pino from 'pino';
 import { getFirestoreDb } from './firebase-admin';
+
+const IS_VERCEL = !!process.env.VERCEL;
 
 let WhatsApp: any = null;
 let expressWebhookHandler: any = null;
@@ -18,12 +19,6 @@ async function getMetaCloudAPI() {
   }
   return { WhatsApp, expressWebhookHandler };
 }
-
-const baileysAny = baileysLib as any;
-const makeWASocket = baileysLib.makeWASocket || baileysAny.default?.makeWASocket || baileysAny.default || baileysLib;
-const useMultiFileAuthState = baileysLib.useMultiFileAuthState || baileysAny.default?.useMultiFileAuthState;
-const DisconnectReason = baileysLib.DisconnectReason || baileysAny.default?.DisconnectReason;
-const fetchLatestBaileysVersion = baileysLib.fetchLatestBaileysVersion || baileysAny.default?.fetchLatestBaileysVersion;
 
 let _whatsAppClient: any | null = null;
 
@@ -48,6 +43,18 @@ export const waMessages = new Map<string, Map<string, any[]>>();
 export const getAuthPath = (userId: string) => path.join(os.tmpdir(), `baileys_auth_${userId}`);
 
 export async function startBaileysSession(userId: string) {
+  if (IS_VERCEL) {
+    throw new Error('Baileys pairing/sessions are not supported on Vercel serverless.');
+  }
+
+  const baileys = await import('@whiskeysockets/baileys');
+  const baileysLib = (baileys as any).default ?? baileys;
+  const baileysAny = baileysLib as any;
+  const makeWASocket = baileysLib.makeWASocket || baileysAny.default?.makeWASocket || baileysAny.default || baileysLib;
+  const useMultiFileAuthState = baileysLib.useMultiFileAuthState || baileysAny.default?.useMultiFileAuthState;
+  const DisconnectReason = baileysLib.DisconnectReason || baileysAny.default?.DisconnectReason;
+  const fetchLatestBaileysVersion = baileysLib.fetchLatestBaileysVersion || baileysAny.default?.fetchLatestBaileysVersion;
+
   const authPath = getAuthPath(userId);
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
   const { version } = await fetchLatestBaileysVersion();
@@ -110,12 +117,6 @@ export async function startBaileysSession(userId: string) {
           '';
 
         if (!remoteJid || !messageText.trim()) continue;
-
-        console.log('Incoming WhatsApp message:', {
-          userId,
-          from: remoteJid,
-          text: messageText,
-        });
 
         try {
           const firestore = getFirestoreDb();
@@ -185,3 +186,4 @@ export async function getMetaCloudAPI() {
 }
 
 export { getMetaCloudAPI };
+
