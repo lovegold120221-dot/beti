@@ -465,9 +465,12 @@ export default function EburonApp() {
         const turnId = lastTurn.timestamp ? lastTurn.timestamp.getTime().toString() : Date.now().toString();
         try {
           const historyRef = doc(db, 'users', user.uid, 'history', turnId);
+          const safeHistoryText = lastTurn.text.length > MAX_HISTORY_CHARS
+            ? lastTurn.text.slice(0, MAX_HISTORY_CHARS) + '\n\n[Truncated for history]'
+            : lastTurn.text;
           await setDoc(historyRef, {
             role: lastTurn.role,
-            text: lastTurn.text,
+            text: safeHistoryText,
             isFinal: lastTurn.isFinal,
             timestamp: lastTurn.timestamp ? lastTurn.timestamp.toISOString() : new Date().toISOString()
           });
@@ -477,7 +480,7 @@ export default function EburonApp() {
             if (alreadyExists) return prev;
             return [...prev, {
               role: lastTurn.role,
-              text: lastTurn.text,
+              text: safeHistoryText,
               timestamp: lastTurn.timestamp || new Date(),
               isFinal: lastTurn.isFinal
             }];
