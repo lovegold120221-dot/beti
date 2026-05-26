@@ -928,7 +928,7 @@ async function createApp(): Promise<express.Express> {
     app.use(vite.middlewares);
   } else {
     app.use(express.static(DIST_PATH));
-    app.get('*', (req, res) => {
+    app.use((_req, res) => {
       res.sendFile(path.join(DIST_PATH, 'index.html'));
     });
   }
