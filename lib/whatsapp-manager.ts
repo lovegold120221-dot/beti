@@ -6,7 +6,6 @@ import QRCode from 'qrcode';
 import { GoogleGenAI } from "@google/genai";
 import Pino from 'pino';
 import { getFirestoreDb } from './firebase-admin';
-import { getAuthPath } from './firebase-admin';
 
 const IS_VERCEL = !!process.env.VERCEL;
 
@@ -516,5 +515,211 @@ export async function startBaileysSession(userId: string) {
   });
 
   return sock;
+}
+
+// PERSISTENCE FUNCTIONS
+
+export interface WhatsAppPermissions {
+  readMessages: boolean;
+  sendMessages: boolean;
+  autoRespond: boolean;
+  makeCalls: boolean;
+  createCampaigns: boolean;
+  learnStyle: boolean;
+  autoReplyRules: boolean;
+  updatedAt: Date;
+}
+
+export const DEFAULT_WA_PERMISSIONS: WhatsAppPermissions = {
+  readMessages: true,
+  sendMessages: false,
+  autoRespond: false,
+  makeCalls: false,
+  createCampaigns: false,
+  learnStyle: true,
+  autoReplyRules: false,
+  updatedAt: new Date(),
+};
+
+export async function savePermissions(userId: string, permissions: WhatsAppPermissions): Promise<void> {
+  const db = getFirestoreDb();
+  await db
+    .collection('users')
+    .doc(userId)
+    .collection('whatsapp_permissions')
+    .doc('permissions')
+    .set({ ...permissions, updatedAt: new Date() });
+}
+
+export async function getPermissions(userId: string): Promise<WhatsAppPermissions> {
+  const db = getFirestoreDb();
+  try {
+    const doc = await db
+      .collection('users')
+      .doc(userId)
+      .collection('whatsapp_permissions')
+      .doc('permissions')
+      .get();
+    if (doc.exists) {
+      const data = doc.data()!;
+      return {
+        readMessages: data.readMessages ?? true,
+        sendMessages: data.sendMessages ?? false,
+        autoRespond: data.autoRespond ?? false,
+        makeCalls: data.makeCalls ?? false,
+        createCampaigns: data.createCampaigns ?? false,
+        learnStyle: data.learnStyle ?? true,
+        autoReplyRules: data.autoReplyRules ?? false,
+        updatedAt: data.updatedAt?.toDate() ?? new Date(),
+      };
+    }
+  } catch (e) {
+    console.warn('Failed to get permissions from Firestore:', e);
+  }
+  return { ...DEFAULT_WA_PERMISSIONS };
+}
+
+export async function updatePermission(userId: string, key: keyof WhatsAppPermissions, value: boolean): Promise<void> {
+  const current = await getPermissions(userId);
+  current[key] = value;
+  current.updatedAt = new Date();
+  await savePermissions(userId, current);
+}
+
+export async function saveSessionState(userId: string, state: { phone: string; name: string; connected: boolean }): Promise<void> {
+  const db = getFirestoreDb();
+  await db
+    .collection('users')
+    .doc(userId)
+    .collection('whatsapp_session')
+    .doc('session')
+    .set({
+      phone: state.phone,
+      name: state.name,
+      connected: state.connected,
+      updatedAt: new Date(),
+    });
+}
+
+export async function getSessionState(userId: string): Promise<{ phone: string | null; name: string | null; connected: boolean } | null> {
+  const db = getFirestoreDb();
+  try {
+    const doc = await db
+      .collection('users')
+      .doc(userId)
+      .collection('whatsapp_session')
+      .doc('session')
+      .get();
+    if (doc.exists) {
+      const data = doc.data()!;
+      return {
+        phone: data.phone ?? null,
+        name: data.name ?? null,
+        connected: data.connected ?? false,
+      };
+    }
+  } catch (e) {
+    console.warn('Failed to get session state from Firestore:', e);
+  }
+  return null;
+}
+
+export async function saveUserConfig(userId: string, key: string, value: any): Promise<void> {
+  const db = getFirestoreDb();
+  await db
+    .collection('users')
+    .doc(userId)
+    .collection('config')
+    .doc(key)
+    .set({ value, updatedAt: new Date() });
+}
+
+export async function getUserConfig(userId: string, key: string): Promise<any | null> {
+  const db = getFirestoreDb();
+  try {
+    const doc = await db
+      .collection('users')
+      .doc(userId)
+      .collection('config')
+      .doc(key)
+      .get();
+    if (doc.exists) {
+      return doc.data()!.value;
+    }
+  } catch (e) {
+    console.warn('Failed to get config from Firestore:', e);
+  }
+  return null;
+}
+
+export async function getAllUserConfigs(userId: string): Promise<Record<string, any>> {
+  const db = getFirestoreDb();
+  try {
+    const snapshot = await db
+      .collection('users')
+      .doc(userId)
+      .collection('config')
+      .get();
+    const configs: Record<string, any> = {};
+    snapshot.docs.forEach(doc => {
+      configs[doc.id] = doc.data().value;
+    });
+    return configs;
+  } catch (e) {
+    console.warn('Failed to get all configs from Firestore:', e);
+    return {};
+  }
+}
+
+export async function saveMemory(userId: string, memoryId: string, data: any): Promise<void> {
+  const db = getFirestoreDb();
+  await db
+    .collection('users')
+    .doc(userId)
+    .collection('memories')
+    .doc(memoryId)
+    .set({ ...data, updatedAt: new Date() });
+}
+
+export async function getMemory(userId: string, memoryId: string): Promise<any | null> {
+  const db = getFirestoreDb();
+  try {
+    const doc = await db
+      .collection('users')
+      .doc(userId)
+      .collection('memories')
+      .doc(memoryId)
+      .get();
+    return doc.exists ? doc.data() : null;
+  } catch (e) {
+    console.warn('Failed to get memory from Firestore:', e);
+    return null;
+  }
+}
+
+export async function getAllMemories(userId: string): Promise<any[]> {
+  const db = getFirestoreDb();
+  try {
+    const snapshot = await db
+      .collection('users')
+      .doc(userId)
+      .collection('memories')
+      .orderBy('updatedAt', 'desc')
+      .get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (e) {
+    console.warn('Failed to get all memories from Firestore:', e);
+    return [];
+  }
+}
+
+export async function deleteMemory(userId: string, memoryId: string): Promise<void> {
+  const db = getFirestoreDb();
+  await db
+    .collection('users')
+    .doc(userId)
+    .collection('memories')
+    .doc(memoryId)
+    .delete();
 }
 

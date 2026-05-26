@@ -22,6 +22,7 @@ dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
 
 const IS_VERCEL = !!process.env.VERCEL;
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 
 import Pino from 'pino';
