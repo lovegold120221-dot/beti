@@ -61,6 +61,68 @@ export const whatsappTools: FunctionCall[] = [
     },
     isEnabled: true,
     scheduling: FunctionResponseScheduling.INTERRUPT,
-  }
+  },
+  {
+    name: 'learn_boss_style_from_chat_file',
+    description: 'Uploads a WhatsApp chat export file (txt format) and learns the boss\'s chat style - how boss talks, greeting patterns, sign-offs, emoji usage, vulgar language, abbreviations, slang. This teaches Beatrice to respond in the boss\'s authentic voice. Boss uploads file, Beatrice analyzes it.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        filePath: {
+          type: 'STRING',
+          description: 'Path to the chat export file (e.g., /Users/eburon/737733/boses/_chat.txt)',
+        },
+      },
+      required: ['filePath'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'read_uploaded_file',
+    description: 'Reads and extracts text content from an uploaded file (txt, csv, json, md, pdf). Returns the file content and metadata. Use this when boss attaches a file and wants Beatrice to read/analyze it.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        filePath: {
+          type: 'STRING',
+          description: 'Path to the file to read.',
+        },
+      },
+      required: ['filePath'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'parse_file_content',
+    description: 'Parses structured content from files like JSON and CSV. Returns structured data (arrays, objects) that can be analyzed. Use for data files, exports, structured documents.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        filePath: {
+          type: 'STRING',
+          description: 'Path to the file to parse.',
+        },
+        filename: {
+          type: 'STRING',
+          description: 'Name of the file (for extension detection).',
+        },
+      },
+      required: ['filePath', 'filename'],
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
+  {
+    name: 'get_boss_style_profile',
+    description: 'Retrieves the learned boss chat style profile - shows how boss talks including greeting patterns, sign-offs, emoji fingerprint, abbreviations, vulgar language usage, sentence style, and sample messages.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {},
+    },
+    isEnabled: true,
+    scheduling: FunctionResponseScheduling.INTERRUPT,
+  },
 ];
 

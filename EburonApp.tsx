@@ -688,15 +688,36 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && connected) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = (event.target?.result as string).split(',')[1];
-        client.sendRealtimeInput([{ mimeType: file.type, data: base64 }]);
-        useLogStore.getState().addTurn({ role: 'user', text: `[Sent Image: ${file.name}]`, isFinal: true });
-        client.send({ text: `I have attached an image named ${file.name}. Can you describe it?`});
-      };
-      reader.readAsDataURL(file);
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || '';
+      const textExts = ['txt', 'csv', 'json', 'md', 'log', 'xml', 'html', 'css', 'js', 'ts', 'py', 'java', 'c', 'cpp', 'h', 'sql', 'yaml', 'yml', 'ini', 'cfg', 'conf', 'env'];
+      const isTextFile = textExts.includes(fileExt);
+
+      if (isTextFile) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target?.result as string;
+          useLogStore.getState().addTurn({ role: 'user', text: `[Attached file: ${file.name}]`, isFinal: true });
+          client.send({ text: `Boss has attached a file named "${file.name}". Please read and analyze it. Here is the content:\n\n${content}` });
+        };
+        reader.readAsText(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64 = (event.target?.result as string).split(',')[1];
+          client.sendRealtimeInput([{ mimeType: file.type, data: base64 }]);
+          useLogStore.getState().addTurn({ role: 'user', text: `[Attached: ${file.name}]`, isFinal: true });
+          if (file.type.startsWith('image/')) {
+            client.send({ text: `Boss attached an image named "${file.name}". Can you describe it?` });
+          } else if (file.type === 'application/pdf') {
+            client.send({ text: `Boss attached a PDF named "${file.name}". Please read and summarize the content.` });
+          } else {
+            client.send({ text: `Boss attached a file named "${file.name}" (${file.type}). Please acknowledge receipt.` });
+          }
+        };
+        reader.readAsDataURL(file);
+      }
     }
+    e.target.value = '';
   };
 
   useEffect(() => {
@@ -1043,7 +1064,7 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
         <div className="input-wrapper">
           <div className="input-bar">
             <button className="attach-btn" onClick={() => fileInputRef.current?.click()} aria-label="Attach file"><Paperclip size={20} /></button>
-            <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*" onChange={handleFileUpload} />
+            <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
             <input 
                type="text" 
                id="message-input" 
