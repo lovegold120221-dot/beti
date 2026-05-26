@@ -194,16 +194,27 @@ async function startBaileysSession(userId: string) {
     throw new Error('Baileys pairing/sessions are not supported on Vercel serverless.');
   }
 
+  // Lazy-load Baileys ONLY in non-Vercel (long-running) runtime.
+  const baileys = await import('@whiskeysockets/baileys');
+  const baileysLib = (baileys as any).default ?? baileys;
+
+  const baileysAny = baileysLib as any;
+  const makeWASocket = baileysLib.makeWASocket || baileysAny.default?.makeWASocket || baileysAny.default || baileysLib;
+  const useMultiFileAuthState = baileysLib.useMultiFileAuthState || baileysAny.default?.useMultiFileAuthState;
+  const DisconnectReason = baileysLib.DisconnectReason || baileysAny.default?.DisconnectReason;
+  const fetchLatestBaileysVersion = baileysLib.fetchLatestBaileysVersion || baileysAny.default?.fetchLatestBaileysVersion;
+
   const authPath = getAuthPath(userId);
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
   const { version } = await fetchLatestBaileysVersion();
-  
+
   const sock = makeWASocket({
     version,
     auth: state,
     printQRInTerminal: false,
     logger: Pino({ level: 'silent' }) as any
   });
+
 
   waSessions.set(userId, sock);
 
@@ -841,7 +852,7 @@ async function createApp(): Promise<express.Express> {
       webhookVerificationToken: webhookToken,
     });
 
-    webhookClient.processor.onText(async (_wa, processed) => {
+    webhookClient.processor.onText(async (_wa: any, processed: any) => {
       const { message } = processed;
       const from = message.from;
       const text = message.text?.body || '';
@@ -871,7 +882,7 @@ async function createApp(): Promise<express.Express> {
       }
     });
 
-    webhookClient.processor.onStatus((_wa, processed) => {
+    webhookClient.processor.onStatus((_wa: any, processed: any) => {
       const { status } = processed;
       console.log(`WhatsApp message status: ${status.id} -> ${status.status}`);
     });
