@@ -4,7 +4,7 @@ import { FunctionResponseScheduling } from '@google/genai';
 export const whatsappTools: FunctionCall[] = [
   {
     name: 'send_whatsapp_message',
-    description: 'Sends an official WhatsApp message to a specific phone number using Eburon\'s Meta for Developers WhatsApp Cloud API. Ensure you have confirmed the user\'s intent and the phone number before sending.',
+    description: 'Sends an official WhatsApp message to a specific phone number using Eburon\'s Meta for Developers WhatsApp Cloud API. Use this tool for WhatsApp actions only; do not invoke unrelated tools for WhatsApp queries. Ensure you have confirmed the user\'s intent and the phone number before sending.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -24,7 +24,7 @@ export const whatsappTools: FunctionCall[] = [
   },
   {
     name: 'connect_whatsapp',
-    description: 'Launches the WhatsApp linkage and configuration interface on screen, guiding the user through connecting their WhatsApp Business portfolio or scanning the QR code pairing process.',
+    description: 'Launches the WhatsApp linkage and configuration interface on screen, guiding the user through connecting their WhatsApp Business portfolio or scanning the QR code pairing process. Only use for WhatsApp connection workflows.',
     parameters: {
       type: 'OBJECT',
       properties: {},
@@ -34,7 +34,7 @@ export const whatsappTools: FunctionCall[] = [
   },
   {
     name: 'search_whatsapp_contacts',
-    description: 'Retrieves the list of contacts synced from the user\'s connected WhatsApp account. Use this to lookup the phone number of a friend or contact by name.',
+    description: 'Retrieves the list of contacts synced from the user\'s connected WhatsApp account. Use this to lookup the phone number of a friend or contact by name. Use this tool for WhatsApp contact lookup only.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -49,7 +49,7 @@ export const whatsappTools: FunctionCall[] = [
   },
   {
     name: 'read_whatsapp_chats',
-    description: 'Retrieves the recent chats and their latest messages from the user\'s connected WhatsApp account. If a specific chat "jid" is provided, it retrieves the recent message history for that chat.',
+    description: 'Retrieves the recent chats and their latest messages from the user\'s connected WhatsApp account. If a specific chat "jid" is provided, it retrieves the recent message history for that chat. Use this tool only for WhatsApp chat history and review.',
     parameters: {
       type: 'OBJECT',
       properties: {

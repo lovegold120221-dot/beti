@@ -120,6 +120,8 @@ const waMessages = new Map<string, Map<string, any[]>>();
 const getAuthPath = (userId: string) => path.join(os.tmpdir(), `baileys_auth_${userId}`);
 
 async function generateBeatriceReply({ userId, message, channel, from }: any) {
+  // NOTE: This helper is retained for future manual WhatsApp reply workflows.
+  // Incoming WhatsApp messages are not auto-answered by default.
   if (!process.env.GEMINI_API_KEY) return "Beatrice is offline (missing Gemini API key).";
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -135,6 +137,7 @@ CORE BEHAVIOR:
 - Keep replies to 1-3 short sentences. This is WhatsApp — no paragraphs, no lectures.
 - Mirror the user's tone. If they're casual, be casual. If they're formal, match it.
 - Never mention you are an AI. You are Beatrice, a human assistant at Eburon AI.
+- When composing a reply, mimic the exact voice and pace of the person who texted you, and rely on past WhatsApp conversation history if available to keep the tone consistent.
 
 TASK HANDLING:
 - For simple queries: answer directly and briefly.
@@ -257,31 +260,10 @@ async function startBaileysSession(userId: string) {
           console.warn('Failed to log incoming WhatsApp message:', logErr);
         }
 
-        /**
-         * Send messageText to Beatrice's AI/chat backend here.
-         * Then send Beatrice's reply back to the same remoteJid.
-         */
-        const beatriceReply = await generateBeatriceReply({
-           userId,
-           message: messageText,
-           channel: 'whatsapp',
-           from: remoteJid,
-        });
-
-        if (beatriceReply) {
-          await sock.sendMessage(remoteJid, { text: beatriceReply });
-          try {
-             const firestore = getFirestoreDb();
-             await firestore.collection('users').doc(userId).collection('whatsapp_messages').add({
-                phone: remoteJid,
-                text: beatriceReply,
-                direction: 'sent',
-                status: 'sent',
-                provider: 'baileys',
-                timestamp: new Date().toISOString()
-             });
-          } catch (e) {}
-        }
+        // This WhatsApp integration only logs incoming messages and stores them.
+        // Beatrice does not automatically reply to WhatsApp messages unless the user
+        // explicitly requests a send action through the UI or a tool call.
+        console.log('Stored incoming WhatsApp message for manual review or action only.');
       }
     } catch (error) {
       console.error('WhatsApp incoming message handler error:', error);
@@ -468,6 +450,29 @@ async function startServer() {
       const searchRes = await fetch(`https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(q as string)}`);
       const data = await searchRes.json();
       const results = data.items?.map((item: any) => `${item.title}: ${item.snippet} (${item.link})`) || [];
+      res.json({ results });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // YouTube Search Proxy
+  app.get('/api/youtube', async (req, res) => {
+    const { q } = req.query;
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.VITE_GOOGLE_API_KEY;
+    if (!apiKey) return res.json({ results: [] });
+    if (!q) return res.json({ results: [] });
+
+    try {
+      const searchRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(q as string)}&key=${apiKey}`
+      );
+      const data = await searchRes.json();
+      const results = (data.items || []).map((item: any) => ({
+        title: item.snippet?.title || '',
+        videoId: item.id?.videoId || '',
+        url: `https://www.youtube.com/watch?v=${item.id?.videoId || ''}`,
+      }));
       res.json({ results });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -783,21 +788,24 @@ async function startServer() {
 
       console.log('Incoming Meta WhatsApp message:', { from, text });
 
-      const beatriceReply = await generateBeatriceReply({
-        userId: 'webhook_user',
-        message: text,
-        channel: 'whatsapp_meta_webhook',
-        from,
-      });
-
-      if (beatriceReply) {
-        const whatsAppClient = await getWhatsAppClient();
-        if (whatsAppClient) {
-          await whatsAppClient.messages.text({
-            to: from,
-            body: beatriceReply,
+      // Store webhook messages and do not auto-reply.
+      console.log('Received Meta WhatsApp webhook message; not replying automatically.', { from, text });
+      try {
+        const firestore = getFirestoreDb();
+        await firestore
+          .collection('users')
+          .doc('webhook_user')
+          .collection('whatsapp_messages')
+          .add({
+            phone: from,
+            text,
+            direction: 'incoming',
+            status: 'received',
+            provider: 'meta_cloud_api',
+            timestamp: new Date().toISOString(),
           });
-        }
+      } catch (logErr) {
+        console.warn('Failed to log incoming Meta WhatsApp webhook message:', logErr);
       }
     });
 
