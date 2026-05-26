@@ -244,7 +244,8 @@ export default function EburonApp() {
         (window as any).gapi.load('picker', {
           callback: () => setIsPickerLoaded(true),
           onerror: () => console.error('GAPI load failed'),
-          timeout: 5000
+          timeout: 5000,
+          ontimeout: () => console.warn('GAPI load timed out')
         });
       }
     };
