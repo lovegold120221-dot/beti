@@ -821,9 +821,41 @@ async function startServer() {
   }
 
   app.post('/api/whatsapp/reply', authenticateToken, async (req: any, res) => {
-    // Simply proxy to /api/whatsapp/send for now, fulfilling semantic requirement
-    req.url = '/api/whatsapp/send';
-    app.handle(req, res);
+    const userId = req.user.uid;
+    const { phone, text } = req.body;
+
+    if (!phone || !text) {
+      return res.status(400).json({ success: false, error: 'Missing phone or text.' });
+    }
+
+    const normalizedPhone = String(phone).replace(/\D/g, '');
+    if (!normalizedPhone) {
+      return res.status(400).json({ success: false, error: 'Invalid phone number.' });
+    }
+
+    // Try Baileys first, then Meta SDK
+    const sock = waSessions.get(userId);
+    if (sock && waStates.has(userId)) {
+      try {
+        const jid = phone.includes('@s.whatsapp.net') ? phone : `${normalizedPhone}@s.whatsapp.net`;
+        const result = await sock.sendMessage(jid, { text });
+        return res.json({ success: true, provider: 'baileys', result });
+      } catch (e: any) {
+        console.error('Baileys reply error:', e);
+      }
+    }
+
+    const whatsAppClient = await getWhatsAppClient();
+    if (!whatsAppClient) {
+      return res.status(500).json({ success: false, error: 'No WhatsApp connection available.' });
+    }
+
+    try {
+      const result = await whatsAppClient.messages.text({ to: normalizedPhone, body: text });
+      return res.json({ success: true, provider: 'meta_cloud_api', result });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, provider: 'meta_cloud_api', error: e.message });
+    }
   });
 
   app.post('/api/whatsapp/sync', authenticateToken, async (req: any, res) => {

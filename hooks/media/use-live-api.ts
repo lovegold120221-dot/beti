@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GenAILiveClient, StreamingLog } from '../../lib/genai-live-client';
-import { LiveConnectConfig, Modality, LiveServerToolCall, LiveServerContent, LiveServerMessage } from '@google/genai';
+import { LiveConnectConfig, Modality, LiveServerToolCall, LiveServerContent, LiveServerMessage, GoogleGenAI } from '@google/genai';
 import { AudioStreamer } from '../../lib/audio-streamer';
 import { audioContext } from '../../lib/utils';
 import VolMeterWorket from '../../lib/worklets/vol-meter';
@@ -694,14 +694,32 @@ export function useLiveApi({
 
         if (fc.name === 'extract_tasks') {
            const { text } = fc.args as any;
-           // Extract tasks logic. Instead of just saving it anywhere, let's output it to active workspace.
-           responsePayload = { status: `Task extraction processed`, originalText: text };
-           // We can render this out as markdown or json.
-           const uiState = await import('../../lib/state');
-           uiState.useUI.getState().setActiveWorkspaceResult({
-               type: 'markdown',
-               content: `## Extracted Action Items:\n\n*Reviewing the following text:*\n> ${text}\n\n- Task extraction will appear here.`
-           });
+           if (!text || !text.trim()) {
+             responsePayload = { status: 'No text provided.', items: [] };
+           } else {
+             try {
+               const ai = new GoogleGenAI({ apiKey });
+               const extraction = await ai.models.generateContent({
+                 model: 'gemini-2.5-flash',
+                 contents: `Extract all action items, tasks, and to-dos from the following text. Return ONLY a JSON array of strings, each string being a clear, actionable task. If there are no tasks, return an empty array [].\n\nText:\n${text}`,
+                 config: {
+                   responseMimeType: 'application/json',
+                 },
+               });
+               const items = JSON.parse(extraction.text || '[]');
+               responsePayload = { items };
+
+               const uiState = await import('../../lib/state');
+               const mdItems = items.map((item: string, i: number) => `${i + 1}. ${item}`).join('\n');
+               uiState.useUI.getState().setActiveWorkspaceResult({
+                 type: 'markdown',
+                 content: `## Extracted Action Items\n\n${mdItems || '_No action items found._'}`,
+               });
+             } catch (e: any) {
+               console.error('Task extraction failed:', e);
+               responsePayload = { status: 'Extraction failed.', error: e.message };
+             }
+           }
         }
 
         if (fc.name === 'open_browser_url') {
