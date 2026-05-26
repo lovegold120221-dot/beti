@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "tsx server.ts",
     "lint": "eslint .",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
+    "build": "NODE_ENV=production vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "NODE_ENV=production node dist/server.cjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -27,6 +27,7 @@
     "firebase-admin": "^13.10.0",
     "lodash": "^4.17.21",
     "lucide-react": "^1.16.0",
+    "meta-cloud-api": "^2.7.0",
     "motion": "^12.39.0",
     "path": "^0.12.7",
     "pino": "^10.3.1",
