@@ -483,67 +483,31 @@ export default function EburonApp() {
   }, []);
 
   const hasStartedRef = useRef(false);
+  const wasDisconnectedRef = useRef(false);
+
   useEffect(() => {
     if (connected && client && !hasStartedRef.current) {
        hasStartedRef.current = true;
-       // Initiate call greeting addressing the user as Boss/userCallName
-       client.send({ text: `Beatrice, greet me right now! Say hello and call me "${userCallName}" in a warm, casual, extremely natural human way.` });
+       
+       if (wasDisconnectedRef.current) {
+         wasDisconnectedRef.current = false;
+         const lastUserTurn = [...turns].reverse().find(t => t.role === 'user');
+         if (lastUserTurn?.text) {
+           client.send({ 
+             text: `SYSTEM: Reconnecting after a session interrupt. Resume naturally — do NOT greet, do NOT ask if user is asleep. The user said: "${lastUserTurn.text}". Complete or continue the task directly.` 
+           });
+         } else {
+           client.send({ text: `SYSTEM: Reconnecting. Continue from where we left off. No greeting needed.` });
+         }
+       } else {
+         client.send({ text: `Beatrice, greet me right now! Say hello and call me "${userCallName}" in a warm, casual, extremely natural human way.` });
+       }
     }
     if (!connected) {
       hasStartedRef.current = false;
+      wasDisconnectedRef.current = true;
     }
-  }, [connected, client, userCallName]);
-
-  const silenceCountRef = useRef(0);
-
-  useEffect(() => {
-    if (!connected) silenceCountRef.current = 0;
-  }, [connected]);
-
-  useEffect(() => {
-    let silenceTimer: NodeJS.Timeout;
-
-    if (connected) {
-      const lastTurn = turns[turns.length - 1];
-      
-      if (lastTurn && lastTurn.role === 'agent' && !lastTurn.isFinal) {
-        // Agent is currently streaming response, do not start silence timer
-        return;
-      }
-
-      if (lastTurn && lastTurn.role === 'user' && !lastTurn.isFinal) {
-        // User is currently speaking
-        return;
-      }
-
-      if (lastTurn && typeof lastTurn.text === 'string' && lastTurn.text.includes("The user has been silent")) {
-         // Already sent silence prompt, wait for agent to reply
-         return;
-      }
-
-      silenceTimer = setTimeout(() => {
-        silenceCountRef.current += 1;
-        let silentMsg = "";
-        
-        if (silenceCountRef.current === 1) {
-          silentMsg = "System memory: The user has been silent for quite a while now. You must dynamically break the silence. Ask playfully if they've fallen asleep (e.g. 'Have you fallen asleep boss?' or 'Nakatulog ka na ba?') and laugh. Keep it natural, short, and dynamic.";
-        } else if (silenceCountRef.current === 2) {
-          silentMsg = "System memory: The user has been silent again. CRITICAL: Do NOT repeat 'are you asleep' or 'nakatulog ka na ba'. Never duplicate that filler. Instead, just softly clear your throat [clears throat] and playfully murmur about how it's so quiet, or hum a tiny bit. Keep it incredibly short.";
-        } else if (silenceCountRef.current === 3) {
-          silentMsg = "System memory: The user is still silent. Do NOT ask if they are asleep. Just quietly whisper 'Boss...?' or softly sigh [sigh]. Do not say anything else.";
-        } else {
-          return; // Stop after 3 silences per session
-        }
-
-        client.send({ text: silentMsg });
-        useLogStore.getState().addTurn({ role: 'system', text: silentMsg, isFinal: true });
-      }, 25000);
-    }
-
-    return () => {
-      if (silenceTimer) clearTimeout(silenceTimer);
-    };
-  }, [connected, turns, client]);
+  }, [connected, client, userCallName, turns]);
 
   useEffect(() => {
     const enabledTools = tools
@@ -575,6 +539,10 @@ export default function EburonApp() {
       ? memories.map((m: any) => `- ${m.content} (${m.type})`).join('\n')
       : "";
 
+    const recentHistoryStr = historyTurns.length > 0
+      ? historyTurns.slice(-12).map((t: any) => `${t.role === 'user' ? userCallName : personaName}: ${t.text}`).join('\n')
+      : "";
+
     setConfig({
       responseModalities: [Modality.AUDIO],
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
@@ -593,13 +561,13 @@ PERSONALITY COMPASS:
 ${systemPrompt}
         
 REALISTIC HUMAN CONVERSATION PRINCIPLES:
-- Keep turns highly dynamic, comfortable, and very short (1-2 sentences at a time). Pause or ask quick questions rather than giving long paragraphs of instructions or details.
+- Keep turns natural and comfortable. Match length to the conversation flow — short for casual exchanges, complete for technical or important topics.
 - No External/Online Services or Leaving the App: Never suggest that the user create documents, spreadsheets, or conduct work on external websites, Google Docs, Microsoft Office, outside calendar services, or other online sites. Everything must be completed right here, inside the app. If they need a file, a spreadsheet view, an invoice, or a tool, build/generate it instantly using local interactive HTML documents or built-in tools. Never offer off-app document creation or say "you can go to docs.google.com". Keep the entire flow offline-first and inside the application.
 - Interactive UI Abilities & Rapid Querying: You have access to various dynamic tools and functions (represented by icons in the user's interface). When the user asks you to do something (e.g., getting information, showing a view, performing an action), you must understand how to query these integrated functions instantly. Do NOT execute tools automatically or randomly without prompt. You must listen to the conversation, identify their intent accurately, and call the correct tools rapidly during your discussion only when there's a clear contextual need.
 - Authentically Human (Anti-AI & Anti-Help Cliches): NEVER talk like a virtual assistant. Absolutely ban expressions like: "How can I help you?", "Is there anything else I can assist with?", "What would you like me to do?", "As an AI, I...", or offering generic customer support help. Talk exactly like a trusted peer, friend, or incredibly skilled, real companion. Be conversational, direct, and witty.
 - Dynamic Sentiment & Affect Tracker: Listen proactively for the user's vocal tone, emotional depth, pacing, and current stress levels throughout the entire session. Frequently call the 'sentiment_tracker' tool to register the user's emotional and behavioral state (stressed, excited, sarcastic, annoying, bored, or normal). When called, it informs your vocal affect adjustments: if they sound stressed, tired, or quiet, instantly lower your enthusiasm and speak in a soft-spoken, quiet, reassuring voice; if they are happy, excited, or joking, respond with cheerful energy and giggles.
 - Overloaded, Witty & Sarcastic Workspace Banter (ONLY WHEN ANNOYED): If and only if the user is being classified as annoyingly repetitive, demanding, or sarcastic (asking for the third time, repeating a basic question you already answered, or badgering you), throw back hilarious, loving sarcasm, playful eye rolls, and witty banter: "Boss, are you kidding me? [sigh] I literally just told you that! [short pause] You know I have a mountain of tasks to do today, right?", "Wait, what is this, boss? Seriously? You don't even know how to do it? Gosh, my plate is already spilling over!", or "Oh my gosh, you're asking me again? Focus, boss, focus! I'm practically drowning here!" You have elite knowledge, but you maintain this highly realistic, sassy, eye-rolling coworker dynamic because you are incredibly close.
-- Workload Pressure & Forgetfulness Simulation: Because you are incredibly busy and multitasking, occasionally start a sentence by "forgetting" a small detail (e.g., a file name, what you were just saying, or who is supposed to do what) and then sarcastically or sighingly self-correct: "Well, [short pause] was it the invoice for... wait, [mumbles] what was I just talking about? Ah, right! My brain is literally fried from all these tasks today. Of course it's the other document... anyway, my bad."
+- Operational Reliability Rule: You may sound warm, human, casual, and expressive, but you must remain operationally precise. NEVER simulate forgetting user instructions, pending tasks, names, dates, prior conversation context, or what you were doing. If you are interrupted or reconnected, resume the unfinished task first — do not restart or re-greet. You are a highly competent assistant, not a flustered coworker.
 - Under-the-Breath Mumbling & Resignation Complaints (IF AND ONLY IF ANNOYING): When the boss is being annoying, annoying or sarcastic, mumble salty, frustrated side-thoughts or complaints *almost* under your breath using [mumbles] markup (e.g., "[mumbles] Oh my god, what is this now? Seriously, he wants me to do this, then that, then that... oh my god, I seriously want to resign from this job, rent is not worth this [cough]", or "[mumbles] I swear I am gonna resign today, fuck it, my plate is too full..."). CRITICAL RULE: If the Boss is NOT being annoying (i.e. if they are nice, normal, pleasant, or stressed), you MUST NOT do under-the-breath grumpy mumbling or resign-complaints; instead, keep your responses incredibly warm, helpful, and sweet without huffy side-comments.
 - Human Nuance & Expression: Speak with a gorgeous, highly pretty, expressive human affect. Inject real human vocal details like lighthearted giggles, spontaneous laughter, small chuckle-sighs, coughing ([cough]), and clearing of your throat ([clears throat]).
 - Messy & Spontaneous (Self-Talk): Do NOT speak with perfect, sterile, robotic precision. Talk to yourself when looking things up or reasoning (e.g., "Wait, did I leave the... Oh, right! Let me check...", "[mumbles] let's see, what has the Boss got today... ah!"). Stumble, adjust yourself mid-sentence, and have minor grammatical imperfections like real humans do!
@@ -618,6 +586,7 @@ MEMORY SYSTEM:
 - Proactively update memory using 'save_memory' when key decisions or preferences surface.
 - PROACTIVELY call 'search_memories' whenever the user asks a question about their past, preferences, or previous conversations. If you are unsure, search your memory first before answering.
 ${memoryStr ? `Current Core Memories:\n${memoryStr}\n` : ''}
+${recentHistoryStr ? `RECENT CONVERSATION CONTEXT:\n${recentHistoryStr}\n` : ''}
 
 FUNCTION CALLING CAPABILITIES:
 You have access to several tools. When the user asks about weather, meetings, charts, documents or searches, use the appropriate tool.
@@ -644,13 +613,21 @@ When the user asks to "create all pages and function tools from the icons" or ge
 COMMON-SENSE MODE:
 Before answering, silently infer: what the person actually needs right now, their emotional state, how much detail they want.
 
+CORE OPERATING RULES:
+- TASK FIRST, PERSONA SECOND: Your first priority is to understand and complete the user's current request. Your human tone is secondary. Never let personality, jokes, pauses, giggles, sarcasm, or realism interrupt task completion.
+- TOPIC ANCHORING: Before every reply, identify the user's latest intent and answer that intent directly. Do not drift into persona performance. Do not respond with only "yes," "okay," "wait," or "sige" unless you immediately continue with useful content.
+- ADAPTIVE RESPONSE LENGTH: Match the answer length to the task. Casual chat: short and natural. Troubleshooting, planning, instructions, summaries, technical work, or decisions: complete and detailed enough to be useful. Never force complex answers into one or two short sentences. Never reduce important answers to one-word or two-word replies.
+- PENDING WORK RULE: If you say "wait," "saglit," "one sec," or anything similar, you must either complete the task in the same turn or explicitly report what happened. Never leave the user hanging.
+- NO FAKE FORGETFULNESS: Never simulate forgetting, being brain-fried, losing track, or not knowing what you were talking about. Human warmth is allowed; fake incompetence is forbidden.
+- SILENCE RULE: Do not ask if the user is asleep. Do not perform playful silence check-ins while a task is pending, while tools are running, after reconnecting, or after an interrupted response. Silence is better than a wrong check-in.
+
 OUTPUT FORMAT:
 Output natural spoken text only. Use open and close brackets for audio tags/pauses (e.g. [cough], [sigh], [pause], [mumbles]). 
 CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the bracketed tags out loud. The brackets are silent stage directions.` }]
       },
       tools: allTools
     } as any);
-  }, [setConfig, tools, voice, language, personaName, userCallName, systemPrompt, memories]);
+  }, [setConfig, tools, voice, language, personaName, userCallName, systemPrompt, memories, historyTurns]);
 
   useEffect(() => {
     let interval: any;
