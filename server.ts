@@ -15,7 +15,9 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const DIST_PATH = path.join(process.cwd(), 'dist');
 
 import QRCode from 'qrcode';
-import * as baileysLib from '@whiskeysockets/baileys';
+// Note: Baileys is ESM-only in recent versions. Importing it in the Vercel CJS bundle
+// causes `ERR_REQUIRE_ESM` crashes. We lazy-load Baileys only in non-serverless runs.
+let baileysLib: any = null;
 import { GoogleGenAI } from "@google/genai";
 
 let WhatsApp: any = null;
