@@ -566,6 +566,10 @@ async function createApp(): Promise<express.Express> {
   });
 
   app.post('/api/whatsapp/disconnect', authenticateToken, async (req: any, res) => {
+    if (IS_VERCEL) {
+      return res.status(400).json({ success: false, error: 'Baileys disconnect is not supported on Vercel serverless.' });
+    }
+
     const userId = req.user.uid;
     if (waSessions.has(userId)) {
       const sock = waSessions.get(userId);
