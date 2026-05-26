@@ -15,10 +15,25 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const DIST_PATH = path.join(process.cwd(), 'dist');
 
 import QRCode from 'qrcode';
-// Note: Baileys is ESM-only in recent versions. Importing it in the Vercel CJS bundle
-// causes `ERR_REQUIRE_ESM` crashes. We lazy-load Baileys only in non-serverless runs.
-let baileysLib: any = null;
 import { GoogleGenAI } from "@google/genai";
+
+const IS_VERCEL = !!process.env.VERCEL;
+
+// IMPORTANT: @whiskeysockets/baileys is ESM-only.
+// Your build outputs `dist/server.cjs` which cannot `require()` ESM modules on Vercel.
+// So we do NOT import/instantiate Baileys at module load time.
+// Instead we lazy-load Baileys only when running locally/long-running environments.
+let baileysLib: any = null;
+
+async function ensureBaileysLoaded() {
+  if (baileysLib) return baileysLib;
+  // On Vercel, Baileys is not supported in this serverless setup anyway.
+  if (IS_VERCEL) return null;
+  const mod = await import('@whiskeysockets/baileys');
+  baileysLib = (mod as any).default ?? mod;
+  return baileysLib;
+}
+
 
 let WhatsApp: any = null;
 let expressWebhookHandler: any = null;
@@ -32,11 +47,8 @@ async function getMetaCloudAPI() {
   return { WhatsApp, expressWebhookHandler };
 }
 
-const baileysAny = baileysLib as any;
-const makeWASocket = baileysLib.makeWASocket || baileysAny.default?.makeWASocket || baileysAny.default || baileysLib;
-const useMultiFileAuthState = baileysLib.useMultiFileAuthState || baileysAny.default?.useMultiFileAuthState;
-const DisconnectReason = baileysLib.DisconnectReason || baileysAny.default?.DisconnectReason;
-const fetchLatestBaileysVersion = baileysLib.fetchLatestBaileysVersion || baileysAny.default?.fetchLatestBaileysVersion;
+// Baileys-derived helpers are resolved inside `startBaileysSession()` after lazy-load.
+
 
 import Pino from 'pino';
 
@@ -279,7 +291,7 @@ async function startBaileysSession(userId: string) {
     }
   });
 
-  sock.ev.on('connection.update', (update: any) => {
+sock.ev.on('connection.update', (update: any) => {
     const { connection, lastDisconnect, qr } = update;
     
     if (qr) {
