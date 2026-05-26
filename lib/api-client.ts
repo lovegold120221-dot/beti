@@ -2,12 +2,19 @@
  * API Client for Eburon Backend
  */
 
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '';
+
+/** Prepends the backend base URL so the same code works on localhost and Vercel. */
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
 export const apiClient = {
   get: async (endpoint: string, token?: string) => {
     const headers: any = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     
-    const response = await fetch(endpoint, { headers });
+    const response = await fetch(apiUrl(endpoint), { headers });
     if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
     return response.json();
   },
@@ -16,7 +23,7 @@ export const apiClient = {
     const headers: any = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const response = await fetch(endpoint, {
+    const response = await fetch(apiUrl(endpoint), {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -47,7 +54,7 @@ export const apiClient = {
     const headers: any = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     
-    const response = await fetch(endpoint, {
+    const response = await fetch(apiUrl(endpoint), {
       method: 'PUT',
       headers,
       body: JSON.stringify(body)
@@ -60,7 +67,7 @@ export const apiClient = {
     const headers: any = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     
-    const response = await fetch(endpoint, { method: 'DELETE', headers });
+    const response = await fetch(apiUrl(endpoint), { method: 'DELETE', headers });
     if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
     return response.json();
   }

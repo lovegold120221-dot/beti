@@ -756,7 +756,7 @@ export function useLiveApi({
         } else if (fc.name === 'youtube_search') {
            const { query } = fc.args as any;
            try {
-              const res = await fetch(`/api/youtube?q=${encodeURIComponent(query)}`);
+              const res = await fetch(api.apiUrl(`/api/youtube?q=${encodeURIComponent(query)}`));
               responsePayload = await res.json();
            } catch (e: any) {
               responsePayload = { error: e.message };

@@ -311,13 +311,37 @@ async function startBaileysSession(userId: string) {
   return sock;
 }
 
-async function startServer() {
+let _app: express.Express | null = null;
+
+async function createApp(): Promise<express.Express> {
+  if (_app) return _app;
   const app = express();
   const PORT = parseInt(process.env.PORT as string) || 3000;
 
   app.use((req, res, next) => {
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
     res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+    // Allow Vercel frontend and local dev to call this backend
+    const origin = req.headers.origin;
+    if (origin) {
+      const allowedOrigins = [
+        'https://beti-drab.vercel.app',
+        'https://speak.eburon.ai',
+        'https://eburon.ai',
+        'http://localhost:5173',
+        'http://localhost:3000',
+      ];
+      if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      }
+    }
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
     next();
   });
 
@@ -909,9 +933,23 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Eburon AI Server running on http://localhost:${PORT}`);
+  _app = app;
+  return app;
+}
+
+function startServer() {
+  createApp().then((app) => {
+    const PORT = parseInt(process.env.PORT as string) || 3000;
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Eburon AI Server running on http://localhost:${PORT}`);
+    });
   });
 }
 
-startServer();
+// Vercel serverless: export the app factory; direct run: start the server
+const isVercel = !!process.env.VERCEL;
+if (!isVercel) {
+  startServer();
+}
+
+export { createApp };

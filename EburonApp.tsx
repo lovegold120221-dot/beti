@@ -9,6 +9,7 @@ import { useVideoStream } from './hooks/use-video-stream';
 import { LANGUAGES } from './lib/languages';
 import { AVAILABLE_VOICES, VOICE_ALIASES } from './lib/constants';
 import { auth, db, handleFirestoreError, OperationType, initAuth, googleSignIn, getAccessToken } from './lib/firebase';
+import { apiUrl } from './lib/api-client';
 import firebaseConfig from './firebase-applet-config.json';
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
@@ -143,7 +144,7 @@ export default function EburonApp() {
       setWhatsappLoading(false);
       return;
     }
-    fetch('/api/whatsapp/status', {
+    fetch(apiUrl('/api/whatsapp/status'), {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -168,7 +169,7 @@ export default function EburonApp() {
 
   const fetchWhatsappContacts = async (token: string) => {
     try {
-      const res = await fetch('/api/whatsapp/contacts', {
+      const res = await fetch(apiUrl('/api/whatsapp/contacts'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -210,7 +211,7 @@ export default function EburonApp() {
     setWhatsappLoading(true);
     const token = await auth.currentUser?.getIdToken();
     if (!token) return;
-    fetch('/api/whatsapp/connect', {
+    fetch(apiUrl('/api/whatsapp/connect'), {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -226,7 +227,7 @@ export default function EburonApp() {
     setWhatsappLoading(true);
     const token = await auth.currentUser?.getIdToken();
     if (!token) return;
-    fetch('/api/whatsapp/disconnect', {
+    fetch(apiUrl('/api/whatsapp/disconnect'), {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
     })
