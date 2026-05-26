@@ -530,6 +530,11 @@ async function createApp(): Promise<express.Express> {
 
   // WhatsApp Baileys API
   app.get('/api/whatsapp/status', authenticateToken, async (req: any, res) => {
+    if (IS_VERCEL) {
+      const connected = Boolean(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
+      return res.json({ connected, state: null, deviceId: 'meta_cloud_api', qrUrl: null });
+    }
+
     const userId = req.user.uid;
     const isConnected = waSessions.has(userId) && waStates.has(userId);
     const hasQR = waQRs.has(userId);
@@ -544,6 +549,10 @@ async function createApp(): Promise<express.Express> {
   });
 
   app.post('/api/whatsapp/connect', authenticateToken, async (req: any, res) => {
+    if (IS_VERCEL) {
+      return res.status(400).json({ success: false, error: 'Baileys pairing is not supported on Vercel serverless.' });
+    }
+
     try {
       const userId = req.user.uid;
       if (!waSessions.has(userId)) {
