@@ -137,6 +137,14 @@ export default function EburonApp() {
   const [whatsappContacts, setWhatsappContacts] = useState<any[]>([]);
   const [whatsappLoading, setWhatsappLoading] = useState(false);
 
+  // Send safeguards
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isProcessingLargeInput, setIsProcessingLargeInput] = useState(false);
+
+  const MAX_DIRECT_SEND_CHARS = 6000;
+  const MAX_HISTORY_CHARS = 4000;
+  const MAX_REPORT_MASTER_CHARS = 3000;
+
   const fetchWhatsappStatus = async () => {
     setWhatsappLoading(true);
     const token = await auth.currentUser?.getIdToken();
@@ -769,30 +777,85 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
     }
   };
 
-  const handleSend = () => {
-    if (!message.trim()) return;
-    const text = message;
-    client.send({ text });
-    useLogStore.getState().addTurn({ role: 'user', text, isFinal: true });
+  const chunkText = (text: string, maxChars: number): string[] => {
+    const chunks: string[] = [];
+    for (let i = 0; i < text.length; i += maxChars) {
+      chunks.push(text.slice(i, i + maxChars));
+    }
+    return chunks;
+  };
+
+  const handleSend = async () => {
+    const text = message.trim();
+    if (!text) return;
+    if (!connected) {
+      useLogStore.getState().addTurn({ role: 'system', text: 'Not connected. Please connect before sending.', isFinal: true });
+      return;
+    }
+    if (isSendingMessage) return;
+    if (isProcessingLargeInput) return;
+
+    setIsSendingMessage(true);
     setMessage('');
-    
-    import('./lib/report-master').then(({ handleReportToMasterComment, supabase }) => {
-      if (supabase) {
-        handleReportToMasterComment({
-          supabase,
-          userId: auth.currentUser?.uid || 'anonymous',
-          conversationId: 'realtime-chat-session',
-          messageId: Date.now().toString(),
-          messageText: text
-        }).then(res => {
-          if (res.detected && res.beatriceReply) {
-            const systemPrompt = `System Message: The user just threatened to report you. You MUST immediately reply with the following apology intent exactly: "${res.beatriceReply}"`;
-            client.send({ text: systemPrompt });
-            useLogStore.getState().addTurn({ role: 'system', text: systemPrompt, isFinal: true });
-          }
-        }).catch(e => console.error(e));
+
+    const safeHistoryText = text.length > MAX_HISTORY_CHARS
+      ? text.slice(0, MAX_HISTORY_CHARS) + '\n\n[Large input truncated in chat view]'
+      : text;
+
+    useLogStore.getState().addTurn({ role: 'user', text: safeHistoryText, isFinal: true });
+
+    try {
+      if (text.length > MAX_DIRECT_SEND_CHARS) {
+        setIsProcessingLargeInput(true);
+        const chunks = chunkText(text, MAX_DIRECT_SEND_CHARS);
+
+        client.send({
+          text: `SYSTEM: The user submitted a large input in ${chunks.length} chunks. Do not answer yet. Wait until all chunks arrive, then analyze the complete content.`
+        });
+
+        for (let i = 0; i < chunks.length; i++) {
+          client.send({ text: `LARGE_INPUT_CHUNK ${i + 1}/${chunks.length}:\n${chunks[i]}` });
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+
+        client.send({
+          text: `SYSTEM: All ${chunks.length} chunks received. Now answer the user's request based on the complete input.`
+        });
+
+        setIsProcessingLargeInput(false);
+      } else {
+        client.send({ text });
       }
-    });
+    } catch (err) {
+      console.error('Failed to send message:', err);
+      useLogStore.getState().addTurn({
+        role: 'system',
+        text: 'Send failed. The message may have been too large or the live session disconnected.',
+        isFinal: true
+      });
+    } finally {
+      setIsSendingMessage(false);
+    }
+
+    if (text.length < MAX_REPORT_MASTER_CHARS) {
+      import('./lib/report-master').then(({ handleReportToMasterComment, supabase }) => {
+        if (supabase) {
+          handleReportToMasterComment({
+            supabase,
+            userId: auth.currentUser?.uid || 'anonymous',
+            conversationId: 'realtime-chat-session',
+            messageId: Date.now().toString(),
+            messageText: text
+          }).then(res => {
+            if (res.detected && res.beatriceReply && connected) {
+              const systemPrompt = `System Message: The user just threatened to report you. You MUST immediately reply with the following apology intent exactly: "${res.beatriceReply}"`;
+              client.send({ text: systemPrompt });
+              useLogStore.getState().addTurn({ role: 'system', text: systemPrompt, isFinal: true });
+            }
+          }).catch(e => console.error(e));
+        }
+      });
+    }
   };
 
   const handleLocationSkillClick = async () => {
@@ -1050,7 +1113,7 @@ CRITICAL: Do NOT use asterisks for any actions. NEVER pronounce or read the brac
                onChange={(e) => setMessage(e.target.value)}
                onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
                autoComplete="off" />
-            <button id="send-button" className="send-btn" onClick={handleSend} aria-label="Send message"><Send size={18} /></button>
+            <button id="send-button" className="send-btn" onClick={handleSend} disabled={isSendingMessage || !message.trim()} aria-label="Send message"><Send size={18} /></button>
           </div>
         </div>
         <nav className="nav-controls">
